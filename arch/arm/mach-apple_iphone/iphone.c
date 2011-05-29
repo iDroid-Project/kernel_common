@@ -48,6 +48,7 @@
 #include <ftl/nand.h>
 
 #include <asm/system.h>
+#include <asm/cpu-single.h>
 #include <mach/system.h>
 
 static struct map_desc iphone_io_desc[] __initdata = {
@@ -205,7 +206,7 @@ static struct map_desc iphone_io_desc[] __initdata = {
 
 void __init iphone_map_io(void)
 {
-	printk("iphone: initializing io map\n");
+	printk(KERN_INFO "iphone: initializing io map\n");
 	iotable_init(iphone_io_desc, ARRAY_SIZE(iphone_io_desc));
 }
 
@@ -261,8 +262,8 @@ static struct i2c_board_info __initdata iphone_i2c0[] = {
 		I2C_BOARD_INFO("lis331dl", 0x3a),
 	},
 	{
-                I2C_BOARD_INFO("isl29003", 0x88),
-        },
+		I2C_BOARD_INFO("isl29003", 0x88),
+	},
 #endif
 };
 
@@ -298,7 +299,7 @@ void __init iphone_init(void)
 {
 	pm_power_off = &iphone_power_off;
 
-	printk("iphone: platform init\r\n");
+	printk(KERN_INFO "iphone: platform init\r\n");
 	iphone_dma_setup();
 
 	iphone_init_suspend();
@@ -310,7 +311,9 @@ void __init iphone_init(void)
 	platform_device_register(&iphone_nand);
 	platform_device_register(&iphone_i2c);
 
-// nickp666: FIX THIS - ALS needs zX powered up before it will work
+	/*
+	 * TODO: ALS needs zX powered up before it will work. - nickp666
+	 */
 
 #ifdef CONFIG_IPHONE_3G
 	iphone_gpio_pin_output(0x701, 1);
@@ -321,7 +324,7 @@ void __init iphone_init(void)
 #endif
 
 #ifdef CONFIG_IPODTOUCH_1G
-        iphone_gpio_pin_output(0x701, 1);
+	iphone_gpio_pin_output(0x701, 1);
 #endif
 
 }

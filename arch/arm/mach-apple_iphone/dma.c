@@ -16,7 +16,8 @@
 #include <mach/dma.h>
 #include <mach/iphone-clock.h>
 
-#define GET_BITS(x, start, length) ((((u32)(x)) << (32 - ((start) + (length)))) >> (32 - (length)))
+#define GET_BITS(x, start, length) \
+	((((u32)(x)) << (32 - ((start) + (length)))) >> (32 - (length)))
 
 static const int ControllerLookupTable[] = {
 	1, 1, 1, 1, 1,
@@ -46,21 +47,22 @@ static const u32 PeripheralLookupTable[][IPHONE_DMA_NUMCONTROLLERS] = {
 };
 
 static volatile DMARequest requests[IPHONE_DMA_NUMCONTROLLERS][IPHONE_DMA_NUMCHANNELS];
-static DMALinkedList* DMALists[IPHONE_DMA_NUMCONTROLLERS][IPHONE_DMA_NUMCHANNELS];
+static DMALinkedList *DMALists[IPHONE_DMA_NUMCONTROLLERS][IPHONE_DMA_NUMCHANNELS];
 static dma_addr_t DMAListsPhys[IPHONE_DMA_NUMCONTROLLERS][IPHONE_DMA_NUMCHANNELS];
 static size_t DMAListsSize[IPHONE_DMA_NUMCONTROLLERS][IPHONE_DMA_NUMCHANNELS];
 
 static void dispatchRequest(volatile DMARequest *request);
 
-static irqreturn_t dmaIRQHandler(int irq, void* pController);
+static irqreturn_t dmaIRQHandler(int irq, void *pController);
 
 static volatile int Controller0FreeChannels[IPHONE_DMA_NUMCHANNELS] = {0};
 static volatile int Controller1FreeChannels[IPHONE_DMA_NUMCHANNELS] = {0};
 static spinlock_t freeChannelsLock;
 
-static struct device* dma_dev;
+static struct device *dma_dev;
 
-int iphone_dma_setup(void) {
+int iphone_dma_setup(void)
+{
 	int ret;
 
 	iphone_clock_gate_switch(DMAC0_CLOCKGATE, 1);
@@ -68,22 +70,23 @@ int iphone_dma_setup(void) {
 
 	memset(requests, 0, sizeof(requests));
 
-        ret = request_irq(DMAC0_INTERRUPT, dmaIRQHandler, IRQF_DISABLED, "iphone_dma", (void*) 1);
-        ret = request_irq(DMAC1_INTERRUPT, dmaIRQHandler, IRQF_DISABLED, "iphone_dma", (void*) 2);
+	ret = request_irq(DMAC0_INTERRUPT, dmaIRQHandler, IRQF_DISABLED, "iphone_dma", (void *) 1);
+	ret = request_irq(DMAC1_INTERRUPT, dmaIRQHandler, IRQF_DISABLED, "iphone_dma", (void *) 2);
 
 	spin_lock_init(&freeChannelsLock);
 
 	return ret;
 }
 
-static irqreturn_t dmaIRQHandler(int irq, void* pController) {
+static irqreturn_t dmaIRQHandler(int irq, void *pController)
+{
 	u32 intTCStatusReg;
 	u32 intTCClearReg;
 	u32 intTCStatus;
 	int channel;
 	u32 controller = (u32)pController;
 
-	if(controller == 1) {
+	if (controller == 1) {
 		intTCStatusReg = DMAC0 + DMACIntTCStatus;
 		intTCClearReg = DMAC0 + DMACIntTCClear;
 	} else {
@@ -93,8 +96,8 @@ static irqreturn_t dmaIRQHandler(int irq, void* pController) {
 
 	intTCStatus = __raw_readl(intTCStatusReg);
 
-	for(channel = 0; channel < IPHONE_DMA_NUMCHANNELS; channel++) {
-		if((intTCStatus & (1 << channel)) != 0) {
+	for (channel = 0; channel < IPHONE_DMA_NUMCHANNELS; channel++) {
+		if ((intTCStatus & (1 << channel)) != 0) {
 			dispatchRequest(&requests[controller - 1][channel]);
 			__raw_writel(1 << channel, intTCClearReg);
 		}
@@ -103,14 +106,15 @@ static irqreturn_t dmaIRQHandler(int irq, void* pController) {
 	return IRQ_HANDLED;
 }
 
-static int getFreeChannel(int* controller, int* channel) {
+static int getFreeChannel(int *controller, int *channel)
+{
 	int i;
 	unsigned long flags;
 
 	spin_lock_irqsave(&freeChannelsLock, flags);
-	if((*controller & (1 << 0)) != 0) {
-		for(i = 0; i < IPHONE_DMA_NUMCHANNELS; i++) {
-			if(Controller0FreeChannels[i] == 0) {
+	if ((*controller & (1 << 0)) != 0) {
+		for (i = 0; i < IPHONE_DMA_NUMCHANNELS; i++) {
+			if (Controller0FreeChannels[i] == 0) {
 				*controller = 1;
 				*channel = i;
 				Controller0FreeChannels[i] = 1;
@@ -120,9 +124,9 @@ static int getFreeChannel(int* controller, int* channel) {
 		}
 	}
 
-	if((*controller & (1 << 1)) != 0) {
-		for(i = 0; i < IPHONE_DMA_NUMCHANNELS; i++) {
-			if(Controller1FreeChannels[i] == 0) {
+	if ((*controller & (1 << 1)) != 0) {
+		for (i = 0; i < IPHONE_DMA_NUMCHANNELS; i++) {
+			if (Controller1FreeChannels[i] == 0) {
 				*controller = 2;
 				*channel = i;
 				Controller1FreeChannels[i] = 1;
@@ -136,26 +140,27 @@ static int getFreeChannel(int* controller, int* channel) {
 	return ERROR_BUSY;
 }
 
-void iphone_dma_set_done_handler(int* controller, int* channel, void (*done_handler)(int controller, int channel, void* token), void* token)
+void iphone_dma_set_done_handler(int *controller, int *channel, void (*done_handler)(int controller, int channel, void *token), void *token)
 {
 	requests[*controller - 1][*channel].token = token;
 	requests[*controller - 1][*channel].done_handler = done_handler;
 }
 
-int iphone_dma_request(int Source, int SourceTransferWidth, int SourceBurstSize, int Destination, int DestinationTransferWidth, int DestinationBurstSize, int* controller, int* channel) {
+int iphone_dma_request(int Source, int SourceTransferWidth, int SourceBurstSize, int Destination, int DestinationTransferWidth, int DestinationBurstSize, int *controller, int *channel)
+{
 	u32 DMACControl;
 	u32 DMACConfig;
 	u32 config;
 	int x;
 
-	if(*controller == 0) {
+	if (*controller == 0) {
 		*controller = ControllerLookupTable[Source] & ControllerLookupTable[Destination];
 
-		if(*controller == 0) {
+		if (*controller == 0)
 			return ERROR_DMA;
-		}
 
-		while(getFreeChannel(controller, channel) == ERROR_BUSY);
+		while (getFreeChannel(controller, channel) == ERROR_BUSY);
+
 		requests[*controller - 1][*channel].started = true;
 		requests[*controller - 1][*channel].done = false;
 		requests[*controller - 1][*channel].done_handler = NULL;
@@ -163,10 +168,10 @@ int iphone_dma_request(int Source, int SourceTransferWidth, int SourceBurstSize,
 		requests[*controller - 1][*channel].channel = *channel;
 	}
 
-	if(*controller == 1) {
+	if (*controller == 1) {
 		DMACControl = DMAC0 + DMAC0Control0 + (*channel * DMAChannelRegSize);
 		DMACConfig = DMAC0 + DMACConfiguration;
-	} else if(*controller == 2) {
+	} else if (*controller == 2) {
 		DMACControl = DMAC1 + DMAC0Control0 + (*channel * DMAChannelRegSize);
 		DMACConfig = DMAC1 + DMACConfiguration;
 	} else {
@@ -177,17 +182,17 @@ int iphone_dma_request(int Source, int SourceTransferWidth, int SourceBurstSize,
 
 	__raw_writel(DMACConfiguration_ENABLE, DMACConfig);
 
-	config |= (SourceTransferWidth / 2) << DMAC0Control0_SWIDTHSHIFT; // 4 -> 2, 2 -> 1, 1 -> 0
-	config |= (DestinationTransferWidth / 2) << DMAC0Control0_DWIDTHSHIFT; // 4 -> 2, 2 -> 1, 1 -> 0
+	config |= (SourceTransferWidth / 2) << DMAC0Control0_SWIDTHSHIFT; /* 4 -> 2, 2 -> 1, 1 -> 0 */
+	config |= (DestinationTransferWidth / 2) << DMAC0Control0_DWIDTHSHIFT; /* 4 -> 2, 2 -> 1, 1 -> 0 */
 
-	for(x = 0; x < 7; x++) {
-		if((1 << (x + 1)) >= SourceBurstSize) {
+	for (x = 0; x < 7; x++) {
+		if ((1 << (x + 1)) >= SourceBurstSize) {
 			config |= x << DMAC0Control0_SBSIZESHIFT;
 			break;
 		}
 	}
-	for(x = 0; x < 7; x++) {
-		if((1 << (x + 1)) >= DestinationBurstSize) {
+	for (x = 0; x < 7; x++) {
+		if ((1 << (x + 1)) >= DestinationBurstSize) {
 			config |= x << DMAC0Control0_DBSIZESHIFT;
 			break;
 		}
@@ -201,40 +206,40 @@ int iphone_dma_request(int Source, int SourceTransferWidth, int SourceBurstSize,
 	return 0;
 }
 
-dma_addr_t iphone_dma_dstpos(int controller, int channel) {
+dma_addr_t iphone_dma_dstpos(int controller, int channel)
+{
 	u32 regOffset = channel * DMAChannelRegSize;
 
-	if(controller == 1) {
+	if (controller == 1)
 		regOffset += DMAC0;
-	} else if(controller == 2) {
+	else if (controller == 2)
 		regOffset += DMAC1;
-	}
 
 	return __raw_readl(regOffset + DMAC0DestAddress);
 }
 
-dma_addr_t iphone_dma_srcpos(int controller, int channel) {
+dma_addr_t iphone_dma_srcpos(int controller, int channel)
+{
 	u32 regOffset = channel * DMAChannelRegSize;
 
-	if(controller == 1) {
+	if (controller == 1)
 		regOffset += DMAC0;
-	} else if(controller == 2) {
+	else if (controller == 2)
 		regOffset += DMAC1;
-	}
 
 	return __raw_readl(regOffset + DMAC0SrcAddress);
 }
 
-size_t iphone_dma_continue_list_size(dma_addr_t Source, dma_addr_t Destination, int size, int* controller, int* channel)
+size_t iphone_dma_continue_list_size(dma_addr_t Source, dma_addr_t Destination, int size, int *controller, int *channel)
 {
 	int transfers;
 	int segments;
 	u32 regControl0;
 	u32 regOffset = (*channel * DMAChannelRegSize);
 
-	if(*controller == 1)
+	if (*controller == 1)
 		regOffset += DMAC0;
-	else if(*controller == 2)
+	else if (*controller == 2)
 		regOffset += DMAC1;
 
 	regControl0 = regOffset + DMAC0Control0;
@@ -245,15 +250,15 @@ size_t iphone_dma_continue_list_size(dma_addr_t Source, dma_addr_t Destination, 
 	return segments * sizeof(DMALinkedList);
 }
 
-void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, int size, int* controller, int* channel,
-		DMALinkedList** continueList, dma_addr_t* phys, size_t* list_size, DMALinkedList** last)
+void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, int size, int *controller, int *channel,
+		DMALinkedList **continueList, dma_addr_t *phys, size_t *list_size, DMALinkedList **last)
 {
 	int transfers;
 	int segments;
 	u32 src;
 	u32 dest;
-	DMALinkedList* list;
-	DMALinkedList* item;
+	DMALinkedList *list;
+	DMALinkedList *item;
 	dma_addr_t listPhys;
 	dma_addr_t itemPhys;
 	u32 control;
@@ -263,9 +268,9 @@ void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, 
 	u32 destinationIncrement = 0;
 	u32 regOffset = (*channel * DMAChannelRegSize);
 
-	if(*controller == 1)
+	if (*controller == 1)
 		regOffset += DMAC0;
-	else if(*controller == 2)
+	else if (*controller == 2)
 		regOffset += DMAC1;
 
 	regControl0 = regOffset + DMAC0Control0;
@@ -276,19 +281,17 @@ void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, 
 
 	segments = (transfers + (0xE00 - 1))/0xE00;
 
-	if(*list_size >= (segments * sizeof(DMALinkedList)))
-	{
+	if (*list_size >= (segments * sizeof(DMALinkedList))) {
 		list = *continueList;
 		listPhys = *phys;
-	} else
-	{
+	} else {
 		*list_size = segments * sizeof(DMALinkedList);
 		list = dma_alloc_writecombine(dma_dev, *list_size, &listPhys, GFP_KERNEL);
 		*continueList = list;
 	}
 
-	if(Source <= (sizeof(AddressLookupTable)/sizeof(u32))) {
-		if(Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
+	if (Source <= (sizeof(AddressLookupTable)/sizeof(u32))) {
+		if (Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
 			src = AddressLookupTable[Source];
 			dest = AddressLookupTable[Destination];
 		} else {
@@ -297,7 +300,7 @@ void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, 
 			destinationIncrement = 1 << DMAC0Control0_DESTINATIONINCREMENT;
 		}
 	} else {
-		if(Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
+		if (Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
 			src = Source;
 			dest = AddressLookupTable[Destination];
 			sourceIncrement = 1 << DMAC0Control0_SOURCEINCREMENT;
@@ -312,8 +315,7 @@ void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, 
 	item = list;
 	itemPhys = listPhys;
 
-	while(transfers > 0)
-	{
+	while (transfers > 0) {
 		unsigned int curTransfer = (transfers > 0xE00) ? 0xE00 : transfers;
 
 		item->control = destinationIncrement | sourceIncrement | control | (curTransfer & DMAC0Control0_SIZEMASK);
@@ -321,10 +323,10 @@ void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, 
 		item->destination = dest;
 		item->next = itemPhys + sizeof(DMALinkedList);
 
-		if(sourceIncrement != 0)
+		if (sourceIncrement != 0)
 			src += 0xE00 << width_shift;
 
-		if(destinationIncrement != 0)
+		if (destinationIncrement != 0)
 			dest += 0xE00 << width_shift;
 
 		transfers -= curTransfer;
@@ -336,21 +338,21 @@ void iphone_dma_create_continue_list(dma_addr_t Source, dma_addr_t Destination, 
 	item->control |= 1 << DMAC0Control0_TERMINALCOUNTINTERRUPTENABLE;
 	item->next = 0;
 
-	if(last)
+	if (last)
 		*last = item;
 
 	*phys = listPhys;
 	return;
 }
 
-int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMALinkedList* continueList, int* controller, int* channel)
+int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMALinkedList *continueList, int *controller, int *channel)
 {
 	u32 regSrcAddress;
 	u32 regDestAddress;
 	u32 regLLI;
 	u32 regControl0;
 	u32 regConfiguration;
-	DMALinkedList* list = NULL;
+	DMALinkedList *list = NULL;
 	dma_addr_t listPhys = 0;
 	size_t listSize = 0;
 	u32 sourcePeripheral = 0;
@@ -358,9 +360,9 @@ int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMAL
 	u32 flowControl = 0;
 	u32 regOffset = (*channel * DMAChannelRegSize);
 
-	if(*controller == 1)
+	if (*controller == 1)
 		regOffset += DMAC0;
-	else if(*controller == 2)
+	else if (*controller == 2)
 		regOffset += DMAC1;
 
 	regSrcAddress = regOffset + DMAC0SrcAddress;
@@ -369,14 +371,12 @@ int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMAL
 	regControl0 = regOffset + DMAC0Control0;
 	regConfiguration = regOffset + DMAC0Configuration;
 
-	if(DMALists[*controller - 1][*channel])
-	{
+	if (DMALists[*controller - 1][*channel]) {
 		dma_free_writecombine(dma_dev, DMAListsSize[*controller -  1][*channel], DMALists[*controller - 1][*channel], DMAListsPhys[*controller - 1][*channel]);
 		DMALists[*controller - 1][*channel] = NULL;
 	}
 
-	if(!continueList)
-	{
+	if (!continueList) {
 		iphone_dma_create_continue_list(Source, Destination, size, controller, channel, &list, &listPhys, &listSize, NULL);
 
 		DMALists[*controller - 1][*channel] = list;
@@ -386,8 +386,8 @@ int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMAL
 		continueList = list;
 	}
 
-	if(Source <= (sizeof(AddressLookupTable)/sizeof(u32))) {
-		if(Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
+	if (Source <= (sizeof(AddressLookupTable)/sizeof(u32))) {
+		if (Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
 			sourcePeripheral = PeripheralLookupTable[Source][*controller - 1];
 			destPeripheral = PeripheralLookupTable[Destination][*controller - 1];
 			flowControl =  DMAC0Configuration_FLOWCNTRL_P2P;
@@ -397,7 +397,7 @@ int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMAL
 			flowControl =  DMAC0Configuration_FLOWCNTRL_P2M;
 		}
 	} else {
-		if(Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
+		if (Destination <= (sizeof(AddressLookupTable)/sizeof(u32))) {
 			sourcePeripheral = PeripheralLookupTable[IPHONE_DMA_MEMORY][*controller - 1];
 			destPeripheral = PeripheralLookupTable[Destination][*controller - 1];
 			flowControl =  DMAC0Configuration_FLOWCNTRL_M2P;
@@ -421,45 +421,47 @@ int iphone_dma_prepare(dma_addr_t Source, dma_addr_t Destination, int size, DMAL
 	return 0;
 }
 
-int iphone_dma_perform(dma_addr_t Source, dma_addr_t Destination, int size, DMALinkedList* continueList, int* controller, int* channel) {
+int iphone_dma_perform(dma_addr_t Source, dma_addr_t Destination, int size, DMALinkedList *continueList, int *controller, int *channel)
+{
 	int ret;
 
 	ret = iphone_dma_prepare(Source, Destination, size, continueList, controller, channel);
 
-	if(ret != 0)
+	if (ret != 0)
 		return ret;
 
 	iphone_dma_resume(*controller, *channel);
 	return 0;
 }
 
-void iphone_dma_pause(int controller, int channel) {
+void iphone_dma_pause(int controller, int channel)
+{
 	u32 regOffset = channel * DMAChannelRegSize;
 
-	if(controller == 1) {
+	if (controller == 1)
 		regOffset += DMAC0;
-	} else if(controller == 2) {
+	else if (controller == 2)
 		regOffset += DMAC1;
-	}
 
 	__raw_writel(__raw_readl(regOffset + DMAC0Configuration) & ~DMAC0Configuration_CHANNELENABLED,
 			regOffset + DMAC0Configuration);
 }
 
-void iphone_dma_resume(int controller, int channel) {
+void iphone_dma_resume(int controller, int channel)
+{
 	u32 regOffset = channel * DMAChannelRegSize;
 
-	if(controller == 1) {
+	if (controller == 1)
 		regOffset += DMAC0;
-	} else if(controller == 2) {
+	else if (controller == 2)
 		regOffset += DMAC1;
-	}
 
 	__raw_writel(__raw_readl(regOffset + DMAC0Configuration) | DMAC0Configuration_CHANNELENABLED,
 			regOffset + DMAC0Configuration);
 }
 
-int iphone_dma_finish(int controller, int channel, int timeout) {
+int iphone_dma_finish(int controller, int channel, int timeout)
+{
 	unsigned long flags;
 	int ret = 0;
 	unsigned long timeout_jiffies;
@@ -468,11 +470,11 @@ int iphone_dma_finish(int controller, int channel, int timeout) {
 		requests[controller - 1][channel].task = current;
 
 	set_current_state(TASK_INTERRUPTIBLE);
-	if(!requests[controller - 1][channel].done)
+	if (!requests[controller - 1][channel].done)
 		timeout_jiffies = schedule_timeout(timeout_jiffies);
 	set_current_state(TASK_RUNNING);
 
-	if(!requests[controller - 1][channel].done)
+	if (!requests[controller - 1][channel].done)
 		ret = -1;
 
 	requests[controller - 1][channel].started = false;
@@ -480,28 +482,25 @@ int iphone_dma_finish(int controller, int channel, int timeout) {
 	requests[controller - 1][channel].task = NULL;
 
 	spin_lock_irqsave(&freeChannelsLock, flags);
-	if(controller == 1)
+	if (controller == 1)
 		Controller0FreeChannels[channel] = 0;
-	else if(controller == 2)
+	else if (controller == 2)
 		Controller1FreeChannels[channel] = 0;
 	spin_unlock_irqrestore(&freeChannelsLock, flags);
 
 	return ret;
 }
 
-static void dispatchRequest(volatile DMARequest *request) {
-	// TODO: Implement this
+static void dispatchRequest(volatile DMARequest *request)
+{
+	/* TODO: Implement this */
 	request->done = true;
 
-	if(request->task)
-	{
+	if (request->task)
 		wake_up_process(request->task);
-	}
 
-	if(request->done_handler)
-	{
+	if (request->done_handler)
 		request->done_handler(request->controller, request->channel, request->token);
-}
 }
 
 static u64 iphone_dma_dmamask = DMA_BIT_MASK(32);

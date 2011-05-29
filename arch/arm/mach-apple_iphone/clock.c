@@ -24,7 +24,7 @@
 #include <mach/hardware.h>
 #include <mach/iphone-clock.h>
 
-// Constants
+/* Constants */
 #define NUM_PLL 4
 #define FREQUENCY_BASE 12000000
 #define PLL0_INFREQ_DIV FREQUENCY_BASE /* 12 MHz */
@@ -36,10 +36,10 @@
 #define PLL2_INFREQ_MULT 0x4000
 #define PLL3_INFREQ_MULT FREQUENCY_BASE
 
-// Devices
+/* Devices */
 #define CLOCK1 IO_ADDRESS(0x3C500000)
 
-// Registers
+/* Registers */
 #define CLOCK1_CONFIG0 0x0
 #define CLOCK1_CONFIG1 0x4
 #define CLOCK1_CONFIG2 0x8
@@ -51,7 +51,7 @@
 #define CLOCK1_CL2_GATES 0x48
 #define CLOCK1_CL3_GATES 0x4C
 
-// Values
+/* Values */
 #define CLOCK1_Separator 0x20
 
 #define CLOCK1_CLOCKPLL(x) GET_BITS((x), 12, 2)
@@ -69,7 +69,8 @@
 #define CLOCK1_UNKNOWNPLL(x) GET_BITS((x), 12, 2)
 #define CLOCK1_UNKNOWNDIVIDER1(x) (GET_BITS((x), 0, 4) + 1)
 #define CLOCK1_UNKNOWNDIVIDER2(x) (GET_BITS((x), 4, 4) + 1)
-#define CLOCK1_UNKNOWNDIVIDER(x) (CLOCK1_UNKNOWNDIVIDER1(x) * CLOCK1_UNKNOWNDIVIDER2(x))
+#define CLOCK1_UNKNOWNDIVIDER(x) \
+			(CLOCK1_UNKNOWNDIVIDER1(x) * CLOCK1_UNKNOWNDIVIDER2(x))
 #define CLOCK1_UNKNOWNHASDIVIDER(x) GET_BITS((x), 8, 1)
 
 #define CLOCK1_PERIPHERALDIVIDER(x) GET_BITS((x), 20, 2)
@@ -87,12 +88,13 @@
 #define CLOCK1_PDIV(x) (((x) >> 24) & 0x3F)
 #define CLOCK1_SDIV(x) ((x) & 0x3)
 
-void iphone_clock_gate_switch(u32 gate, int on_off) {
+void iphone_clock_gate_switch(u32 gate, int on_off)
+{
 	u32 gate_register;
 	u32 gate_flag;
 	u32 gates;
 
-	if(gate < CLOCK1_Separator) {
+	if (gate < CLOCK1_Separator) {
 		gate_register = CLOCK1 + CLOCK1_CL2_GATES;
 		gate_flag = gate;
 	} else {
@@ -102,11 +104,10 @@ void iphone_clock_gate_switch(u32 gate, int on_off) {
 
 	gates = __raw_readl(gate_register);
 
-	if(on_off) {
+	if (on_off)
 		gates &= ~(1 << gate_flag);
-	} else {
+	else
 		gates |= 1 << gate_flag;
-	}
 
 	__raw_writel(gates, gate_register);
 
